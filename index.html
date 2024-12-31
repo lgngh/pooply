@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pooply - Track Your Poops!</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/3.0.1/js.cookie.min.js"></script>
+    <style>
+        body {
+            font-family: 'Comic Sans MS', cursive;
+            background-color: #f5e6d3;
+            margin: 0;
+            padding: 20px;
+            color: #4a3000;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #643200;
+            font-size: 2.5em;
+            margin-bottom: 20px;
+        }
+        .poop-emoji {
+            font-size: 2em;
+            margin: 0 5px;
+        }
+        .timer {
+            text-align: center;
+            font-size: 2em;
+            margin: 20px 0;
+        }
+        .button {
+            background-color: #8b4513;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 1.2em;
+            cursor: pointer;
+            margin: 10px;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #643200;
+        }
+        .stats {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #fff9f0;
+            border-radius: 15px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 10px;
+            margin: 5px;
+            background-color: #ffd700;
+            border-radius: 15px;
+            font-size: 0.9em;
+        }
+        .export-import {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #poopList {
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .poop-entry {
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #fff9f0;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Pooply <span class="poop-emoji">💩</span></h1>
+        
+        <div class="timer" id="timer">00:00</div>
+        
+        <div style="text-align: center;">
+            <button class="button" id="startStop">Start Pooping</button>
+        </div>
+        
+        <div class="stats">
+            <h2>Today's Stats</h2>
+            <div id="todayStats"></div>
+            
+            <h2>All-Time Stats</h2>
+            <div id="allTimeStats"></div>
+            
+            <h2>Your Badges</h2>
+            <div id="badges"></div>
+        </div>
+        
+        <div id="poopList"></div>
+        
+        <div class="export-import">
+            <button class="button" onclick="exportData()">Export Data</button>
+            <input type="file" id="importFile" style="display: none;" onchange="importData(event)">
+            <button class="button" onclick="document.getElementById('importFile').click()">Import Data</button>
+        </div>
+    </div>
+
+    <script>
+        let startTime = null;
+        let timerInterval = null;
+        let poopData = [];
+
+        // Load data from cookie on startup
+        const loadData = () => {
+            const savedData = Cookies.get('poopData');
+            if (savedData) {
+                poopData = JSON.parse(savedData);
+            }
+            updateStats();
+            updatePoopList();
+        };
+
+        // Save data to cookie
+        const saveData = () => {
+            Cookies.set('poopData', JSON.stringify(poopData), { expires: 365 });
+        };
+
+        // Timer functions
+        const formatTime = (ms) => {
+            const seconds = Math.floor((ms / 1000) % 60);
+            const minutes = Math.floor((ms / 1000 / 60) % 60);
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        };
+
+        const updateTimer = () => {
+            if (startTime) {
+                const elapsed = Date.now() - startTime;
+                document.getElementById('timer').textContent = formatTime(elapsed);
+            }
+        };
+
+        // Start/Stop button handler
+        document.getElementById('startStop').addEventListener('click', () => {
+            const button = document.getElementById('startStop');
+            
+            if (startTime === null) {
+                // Start pooping
+                startTime = Date.now();
+                timerInterval = setInterval(updateTimer, 1000);
+                button.textContent = 'Stop Pooping';
+                button.style.backgroundColor = '#dc3545';
+            } else {
+                // Stop pooping
+                clearInterval(timerInterval);
+                const duration = Date.now() - startTime;
+                
+                // Save poop data
+                poopData.push({
+                    startTime: startTime,
+                    duration: duration,
+                    date: new Date().toISOString()
+                });
+                
+                saveData();
+                updateStats();
+                updatePoopList();
+                
+                // Reset timer
+                startTime = null;
+                document.getElementById('timer').textContent = '00:00';
+                button.textContent = 'Start Pooping';
+                button.style.backgroundColor = '#8b4513';
+            }
+        });
+
+        // Stats calculation and display
+        const updateStats = () => {
+            const today = new Date().toDateString();
+            
+            // Today's stats
+            const todayPoops = poopData.filter(p => new Date(p.date).toDateString() === today);
+            const todayTotal = todayPoops.length;
+            const todayAvg = todayPoops.length > 0 
+                ? (todayPoops.reduce((sum, p) => sum + p.duration, 0) / todayPoops.length / 1000).toFixed(1)
+                : 0;
+
+            // All-time stats
+            const totalPoops = poopData.length;
+            const avgDuration = totalPoops > 0 
+                ? (poopData.reduce((sum, p) => sum + p.duration, 0) / totalPoops / 1000).toFixed(1)
+                : 0;
+            const shortestPoop = totalPoops > 0 
+                ? (Math.min(...poopData.map(p => p.duration)) / 1000).toFixed(1)
+                : 0;
+            const longestPoop = totalPoops > 0 
+                ? (Math.max(...poopData.map(p => p.duration)) / 1000).toFixed(1)
+                : 0;
+
+            document.getElementById('todayStats').innerHTML = `
+                <p>Poops today: ${todayTotal}</p>
+                <p>Average duration today: ${todayAvg}s</p>
+            `;
+
+            document.getElementById('allTimeStats').innerHTML = `
+                <p>Total lifetime poops: ${totalPoops}</p>
+                <p>Average duration: ${avgDuration}s</p>
+                <p>Shortest poop: ${shortestPoop}s</p>
+                <p>Longest poop: ${longestPoop}s</p>
+            `;
+
+            // Update badges
+            const badges = [];
+            
+            // Speed badges
+            const speedPoops = poopData.filter(p => p.duration < 60000).length;
+            if (speedPoops >= 1) badges.push('🏃 Speed Pooper');
+            if (speedPoops >= 5) badges.push('⚡ Lightning Pooper');
+            
+            // Consistency badges
+            if (totalPoops >= 10) badges.push('🎯 Regular');
+            if (totalPoops >= 50) badges.push('👑 Poop Master');
+            
+            // Streak badges
+            let currentStreak = 0;
+            let maxStreak = 0;
+            let lastDate = null;
+            
+            poopData.sort((a, b) => new Date(a.date) - new Date(b.date))
+                .forEach(poop => {
+                    const poopDate = new Date(poop.date).toDateString();
+                    if (lastDate === null || 
+                        new Date(poopDate) - new Date(lastDate) === 86400000) {
+                        currentStreak++;
+                        maxStreak = Math.max(maxStreak, currentStreak);
+                    } else {
+                        currentStreak = 1;
+                    }
+                    lastDate = poopDate;
+                });
+
+            if (maxStreak >= 3) badges.push('🔥 3 Day Streak');
+            if (maxStreak >= 7) badges.push('🌟 Week Warrior');
+
+            document.getElementById('badges').innerHTML = badges.map(b => 
+                `<div class="badge">${b}</div>`
+            ).join('');
+        };
+
+        // Update poop list
+        const updatePoopList = () => {
+            const list = document.getElementById('poopList');
+            list.innerHTML = '<h2>Recent Poops</h2>';
+            
+            [...poopData]
+                .sort((a, b) => new Date(b.date) - new Date(a.date))
+                .slice(0, 10)
+                .forEach(poop => {
+                    const date = new Date(poop.date);
+                    const duration = (poop.duration / 1000).toFixed(1);
+                    
+                    const entry = document.createElement('div');
+                    entry.className = 'poop-entry';
+                    entry.innerHTML = `
+                        <span>${date.toLocaleDateString()} ${date.toLocaleTimeString()}</span>
+                        <span>${duration}s 💩</span>
+                    `;
+                    list.appendChild(entry);
+                });
+        };
+
+        // Export/Import functions
+        const exportData = () => {
+            const dataStr = JSON.stringify(poopData);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'pooply_data.json';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        };
+
+        const importData = (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const importedData = JSON.parse(e.target.result);
+                        if (Array.isArray(importedData)) {
+                            poopData = importedData;
+                            saveData();
+                            updateStats();
+                            updatePoopList();
+                            alert('Data imported successfully!');
+                        } else {
+                            alert('Invalid data format!');
+                        }
+                    } catch (error) {
+                        alert('Error importing data!');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        };
+
+        // Initialize on load
+        loadData();
+    </script>
+</body>
+</html>
